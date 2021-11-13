@@ -15,11 +15,56 @@ else:
 
 __svmbir_lib_path = os.path.join(os.path.expanduser('~'), '.cache', 'svmbir')
 
+
+class Recon:
+    "Callable class wrapper for recon()"
+    def __init__(self, **kwargs):
+        print("in __init__()")
+        self.params = _update_args( _recon_defaults_dict, **kwargs)
+
+    def __call__(self, sino, angles, **kwargs):
+        print("in __call__()")
+        self.params = _update_args( self.params, **kwargs)
+        return recon(sino, angles, **kwargs)
+
+    def set_defaults(self):
+        "Set parameters to defaults"
+        self.params = _recon_defaults_dict
+
+    def set_param(self,key,val):
+        "Set parameters to defaults"
+        if key in self.params.keys():
+            self.params[key] = val
+        else:
+            raise NameError('"{}" not a recognized recon parameter'.format(key))
+
+    def print_params(self):
+        print("----")
+        for key,val in self.params.items():
+            print("{}\t= {}".format(key,val))
+
+    def save_params(self,fname='param_dict.npy'):
+        "Save parameter dict to numpy file"
+        np.save(fname, self.params)
+
+    def load_params(self,fname):
+        "Load parameter dict from numpy file, and merge into instance params"
+        read_dict = np.load(fname,allow_pickle='TRUE').item()
+        self.params = _update_args( self.params, **read_dict)
+
+
+    def backproject(self, sino, angles, **kwargs):
+        print("in backproject()")
+
+    def return_mask(self):
+        print("in return_mask()")
+
+
+
 def _svmbir_lib_path():
     """Returns the path to the cache directory used by svmbir
     """
     return __svmbir_lib_path
-
 
 def _clear_cache(svmbir_lib_path = __svmbir_lib_path):
     """Clears the cache files used by svmbir
@@ -219,14 +264,52 @@ def auto_roi_radius(delta_pixel, num_rows, num_cols):
     return roi_radius
 
 
-def recon(sino, angles,
-          weights = None, weight_type = 'unweighted', init_image = 0.0, prox_image = None, init_proj = None,
-          num_rows = None, num_cols = None, roi_radius = None,
-          delta_channel = 1.0, delta_pixel = 1.0, center_offset = 0.0,
-          sigma_y = None, snr_db = 30.0, sigma_x = None, sigma_p = None, p = 1.2, q = 2.0, T = 1.0, b_interslice = 1.0,
-          sharpness = 0.0, positivity = True, max_resolutions = 0, stop_threshold = 0.02, max_iterations = 100,
-          num_threads = None, delete_temps = True, svmbir_lib_path = __svmbir_lib_path, object_name = 'object',
-          verbose = 1) :
+def _update_args(default_params, **kwargs):
+    """
+    Update parameter dictionary with kwargs input.
+    Raises an exception if kwargs key is not defined in dictionary.
+    """
+    params = dict(default_params)
+    for key,val in kwargs.items():
+        if key in default_params.keys():
+            params[key] = val
+        else:
+            raise NameError('"{}" not a recognized argument'.format(key))
+    return params
+
+
+_recon_defaults_dict = {
+        'weights' : None,
+        'weight_type' : 'unweighted',
+        'init_image' : 0.0,
+        'prox_image' : None,
+        'init_proj' : None,
+        'num_rows' : None,
+        'num_cols' : None,
+        'roi_radius' : None,
+        'delta_channel' : 1.0,
+        'delta_pixel' : 1.0,
+        'center_offset' : 0.0,
+        'sigma_y' : None,
+        'snr_db' : 30.0,
+        'sigma_x' : None,
+        'sigma_p' : None,
+        'p' : 1.2,
+        'q' : 2.0,
+        'T' : 1.0,
+        'b_interslice' : 1.0,
+        'sharpness' : 0.0,
+        'positivity' : True,
+        'max_resolutions' : 0,
+        'stop_threshold' : 0.02,
+        'max_iterations' : 100,
+        'num_threads' : None,
+        'delete_temps' : True,
+        'svmbir_lib_path' : __svmbir_lib_path,
+        'object_name' : 'object',
+        'verbose' : 1}
+
+def recon(sino, angles, **kwargs):
     """recon(sino, angles, weights = None, weight_type = 'unweighted', init_image = 0.0, prox_image = None, init_proj = None, num_rows = None, num_cols = None, roi_radius = None, delta_channel = 1.0, delta_pixel = 1.0, center_offset = 0.0, sigma_y = None, snr_db = 30.0, sigma_x = None, p = 1.2, q = 2.0, T = 1.0, b_interslice = 1.0, sharpness = 1.0, positivity = True, max_resolutions = 0, stop_threshold = 0.02, max_iterations = 100, num_threads = None, delete_temps = True, svmbir_lib_path = '~/.cache/svmbir', object_name = 'object', verbose = 1)
 
     Computes 3D parallel beam MBIR reconstruction using multi-resolution SVMBIR algorithm.
@@ -324,6 +407,39 @@ def recon(sino, angles,
         3D numpy array: 3D reconstruction with shape (num_slices,num_rows,num_cols) in units of :math:`ALU^{-1}`.
     """
 
+    default_params = _recon_defaults_dict
+    params = _update_args(default_params,**kwargs)
+
+    weights = params['weights']
+    weight_type = params['weight_type']
+    init_image = params['init_image']
+    prox_image = params['prox_image']
+    init_proj = params['init_proj']
+    num_rows = params['num_rows']
+    num_cols = params['num_cols']
+    roi_radius = params['roi_radius']
+    delta_channel = params['delta_channel']
+    delta_pixel = params['delta_pixel']
+    center_offset = params['center_offset']
+    sigma_y = params['sigma_y']
+    snr_db = params['snr_db']
+    sigma_x = params['sigma_x']
+    sigma_p = params['sigma_p']
+    p = params['p']
+    q = params['q']
+    T = params['T']
+    b_interslice = params['b_interslice']
+    sharpness = params['sharpness']
+    positivity = params['positivity']
+    max_resolutions = params['max_resolutions']
+    stop_threshold = params['stop_threshold']
+    max_iterations = params['max_iterations']
+    num_threads = params['num_threads']
+    delete_temps = params['delete_temps']
+    svmbir_lib_path = params['svmbir_lib_path']
+    object_name = params['object_name']
+    verbose = params['verbose']
+
     # If not specified, then set number of threads = to number of processors
     if num_threads is None :
         num_threads = cpu_count(logical=False)
@@ -369,6 +485,7 @@ def recon(sino, angles,
         if sigma_p is None:
             sigma_p = auto_sigma_p(sino, delta_channel, sharpness)
         sigma_x = sigma_p
+
     reconstruction = ci.multires_recon(sino=sino, angles=angles, weights=weights, weight_type=weight_type,
                                        init_image=init_image, prox_image=prox_image, init_proj=init_proj,
                                        num_rows=num_rows, num_cols=num_cols, roi_radius=roi_radius,
