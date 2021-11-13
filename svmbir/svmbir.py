@@ -74,6 +74,7 @@ def _clear_cache(svmbir_lib_path = __svmbir_lib_path):
     """
     shutil.rmtree(svmbir_lib_path)
 
+
 def sino_sort(sino, angles, weights=None):
     """ Sort sinogram views (and sinogram weights if provided) so that view angles are in monotonically increasing order on the interval :math:`[0,2\pi)`.
         This function can be used to preprocess the sinogram data so that svmbir reconstruction is faster.
@@ -137,7 +138,7 @@ def calc_weights(sino, weight_type ):
     elif weight_type == 'transmission_root' :
         weights = np.exp(-sino / 2)
     elif weight_type == 'emission' :
-        weights = 1 / (sino + 0.1)
+        weights = 1 / (np.absolute(sino)  + 0.1)
     else :
         raise Exception("calc_weights: undefined weight_type {}".format(weight_type))
 
@@ -176,7 +177,11 @@ def auto_sigma_y(sino, weights, snr_db = 30.0, delta_pixel = 1.0, delta_channel 
     # compute sigma_y and scale by relative pixel and detector pitch
     sigma_y = rel_noise_std * signal_rms * (delta_pixel / delta_channel) ** (0.5)
 
-    return sigma_y
+    if sigma_y > 0:
+        return sigma_y
+    else:
+        return 1.0
+
 
 def auto_sigma_x(sino, delta_channel = 1.0, sharpness = 0.0 ):
     """Computes the automatic value of ``sigma_x`` for use in MBIR reconstruction.
@@ -212,6 +217,7 @@ def auto_sigma_p(sino, delta_channel = 1.0, sharpness = 0.0 ):
         float: Automatic value of regularization parameter.
     """
     return 1.0 * auto_sigma_prior(sino, delta_channel, sharpness)
+
 
 def auto_sigma_prior(sino, delta_channel = 1.0, sharpness = 0.0 ):
     """Computes the automatic value of prior model regularization term for use in MBIR reconstruction or proximal map estimation. This subroutine is called by ``auto_sigma_x`` in MBIR reconstruction, or ``auto_sigma_p`` in proximal map estimation.
