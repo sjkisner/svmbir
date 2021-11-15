@@ -3,6 +3,7 @@ __pycache__
 
 # output
 demo/output/*.png
+*.npy
 
 # docs
 docs/build/

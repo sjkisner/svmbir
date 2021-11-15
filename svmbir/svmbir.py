@@ -17,7 +17,24 @@ __svmbir_lib_path = os.path.join(os.path.expanduser('~'), '.cache', 'svmbir')
 
 
 class Recon:
-    "Callable class wrapper for recon()"
+    """ Callable class that wraps svmbir.recon() and related functions.
+
+    Args:
+        : key-worded arguments for svmbir.recon()
+
+    Attributes:
+        params (dict): Dictionary of key-worded arguments
+
+    Example:
+        >>> rec_op = svmbir.Recon()
+        >>> recon_img = rec_op( sino, angles)
+
+    Returns:
+        image (ndarray): 3D reconstruction with shape (num_slices,num_rows,num_cols). See svmbir.recon().
+
+    Todo:
+        mask = rec_op.return_mask()
+    """
     def __init__(self, **kwargs):
         print("in __init__()")
         self.params = _update_args( _recon_defaults_dict, **kwargs)
@@ -25,14 +42,23 @@ class Recon:
     def __call__(self, sino, angles, **kwargs):
         print("in __call__()")
         self.params = _update_args( self.params, **kwargs)
-        return recon(sino, angles, **kwargs)
+        return recon(sino, angles, **self.params)
+
+    # identical to __call__(), just accessed as standard class method
+    def recon(self, sino, angles, **kwargs):
+        self.params = _update_args( self.params, **kwargs)
+        return recon(sino, angles, **self.params)
 
     def set_defaults(self):
-        "Set parameters to defaults"
+        "Set instance params dictionary to defaults"
         self.params = _recon_defaults_dict
 
-    def set_param(self,key,val):
-        "Set parameters to defaults"
+    def set_params(self, **kwargs):
+        "Set multiple keys in instance params dict."
+        self.params = _update_args( self.params, **kwargs)
+
+    def set_param(self, key, val):
+        "Set a single parameter value. Checks for keyword validity."
         if key in self.params.keys():
             self.params[key] = val
         else:
@@ -41,23 +67,32 @@ class Recon:
     def print_params(self):
         print("----")
         for key,val in self.params.items():
-            print("{}\t= {}".format(key,val))
+            print("{} = {}".format(key,val))
 
-    def save_params(self,fname='param_dict.npy'):
-        "Save parameter dict to numpy file"
+    def save_params(self,fname='param_dict.npy',binaries=False):
+        "Save parameter dict to numpy/pickle file"
+        if binaries is False:
+            # TBD: this wipes the binaries. Should restore the binaries after write.
+            self.params['weights'] = None
+            self.params['prox_image'] = None
+            self.params['init_proj'] = None
+            if not np.isscalar(self.params['init_image']):
+                self.params['init_image'] = None
         np.save(fname, self.params)
 
     def load_params(self,fname):
-        "Load parameter dict from numpy file, and merge into instance params"
+        "Load parameter dict from numpy/pickle file, and merge into instance params"
         read_dict = np.load(fname,allow_pickle='TRUE').item()
         self.params = _update_args( self.params, **read_dict)
 
-
     def backproject(self, sino, angles, **kwargs):
         print("in backproject()")
+        self.params = _update_args( self.params, **kwargs)
+        return backproject(sino, angles, **self.params)
 
+    # TBD
     def return_mask(self):
-        print("in return_mask()")
+        print("in return_mask()..TBD")
 
 
 
@@ -316,8 +351,7 @@ _recon_defaults_dict = {
         'verbose' : 1}
 
 def recon(sino, angles, **kwargs):
-    """recon(sino, angles, weights = None, weight_type = 'unweighted', init_image = 0.0, prox_image = None, init_proj = None, num_rows = None, num_cols = None, roi_radius = None, delta_channel = 1.0, delta_pixel = 1.0, center_offset = 0.0, sigma_y = None, snr_db = 30.0, sigma_x = None, p = 1.2, q = 2.0, T = 1.0, b_interslice = 1.0, sharpness = 1.0, positivity = True, max_resolutions = 0, stop_threshold = 0.02, max_iterations = 100, num_threads = None, delete_temps = True, svmbir_lib_path = '~/.cache/svmbir', object_name = 'object', verbose = 1)
-
+    """
     Computes 3D parallel beam MBIR reconstruction using multi-resolution SVMBIR algorithm.
 
     Args:
@@ -414,7 +448,7 @@ def recon(sino, angles, **kwargs):
     """
 
     default_params = _recon_defaults_dict
-    params = _update_args(default_params,**kwargs)
+    params = _update_args(default_params, **kwargs)
 
     weights = params['weights']
     weight_type = params['weight_type']
@@ -598,11 +632,8 @@ def project(image, angles, num_channels,
 
 
 
-def backproject(sino, angles, num_rows=None, num_cols=None,
-            delta_channel = 1.0, delta_pixel = 1.0, center_offset = 0.0, roi_radius = None,
-            num_threads = None, svmbir_lib_path = __svmbir_lib_path, delete_temps = True, 
-            object_name = 'object', verbose = 1):
-    """backproject(sino, angles, num_rows = None, num_cols = None, delta_channel = 1.0, delta_pixel = 1.0, center_offset = 0.0, roi_radius = None, num_threads = None, svmbir_lib_path = '~/.cache/svmbir', delete_temps = True, object_name = 'object', verbose = 1)
+def backproject(sino, angles, **kwargs):
+    """backproject(sino, angles, **kwargs)
 
     Computes 3D parallel beam back-projection.
 
@@ -638,6 +669,20 @@ def backproject(sino, angles, num_rows=None, num_cols=None,
     Returns:
         ndarray: 3D numpy array containing back projected image (num_slices,num_rows,num_cols).
     """
+    default_params = _recon_defaults_dict
+    params = _update_args(default_params, **kwargs)
+
+    num_rows = params['num_rows']
+    num_cols = params['num_cols']
+    delta_channel = params['delta_channel']
+    delta_pixel = params['delta_pixel']
+    center_offset = params['center_offset']
+    roi_radius = params['roi_radius']
+    num_threads = params['num_threads']
+    svmbir_lib_path = params['svmbir_lib_path']
+    delete_temps = params['delete_temps']
+    object_name = params['object_name']
+    verbose = params['verbose']
 
     # validate input arguments
     angles = utils.test_args_angles(angles)
