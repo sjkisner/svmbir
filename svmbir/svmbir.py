@@ -15,11 +15,91 @@ else:
 
 __svmbir_lib_path = os.path.join(os.path.expanduser('~'), '.cache', 'svmbir')
 
+
+class Recon:
+    """ Callable class that wraps svmbir.recon() and related functions.
+
+    Args:
+        : key-worded arguments for svmbir.recon()
+
+    Attributes:
+        params (dict): Dictionary of key-worded arguments
+
+    Example:
+        >>> rec_op = svmbir.Recon()
+        >>> recon_img = rec_op( sino, angles)
+
+    Returns:
+        image (ndarray): 3D reconstruction with shape (num_slices,num_rows,num_cols). See svmbir.recon().
+
+    Todo:
+        mask = rec_op.return_mask()
+    """
+    def __init__(self, **kwargs):
+        print("in __init__()")
+        self.params = _update_args( _recon_defaults_dict, **kwargs)
+
+    def __call__(self, sino, angles, **kwargs):
+        print("in __call__()")
+        self.params = _update_args( self.params, **kwargs)
+        return recon(sino, angles, **self.params)
+
+    # identical to __call__(), just accessed as standard class method
+    def recon(self, sino, angles, **kwargs):
+        self.params = _update_args( self.params, **kwargs)
+        return recon(sino, angles, **self.params)
+
+    def set_defaults(self):
+        "Set instance params dictionary to defaults"
+        self.params = _recon_defaults_dict
+
+    def set_params(self, **kwargs):
+        "Set multiple keys in instance params dict."
+        self.params = _update_args( self.params, **kwargs)
+
+    def set_param(self, key, val):
+        "Set a single parameter value. Checks for keyword validity."
+        if key in self.params.keys():
+            self.params[key] = val
+        else:
+            raise NameError('"{}" not a recognized recon parameter'.format(key))
+
+    def print_params(self):
+        print("----")
+        for key,val in self.params.items():
+            print("{} = {}".format(key,val))
+
+    def save_params(self,fname='param_dict.npy',binaries=False):
+        "Save parameter dict to numpy/pickle file"
+        if binaries is False:
+            # TBD: this wipes the binaries. Should restore the binaries after write.
+            self.params['weights'] = None
+            self.params['prox_image'] = None
+            self.params['init_proj'] = None
+            if not np.isscalar(self.params['init_image']):
+                self.params['init_image'] = None
+        np.save(fname, self.params)
+
+    def load_params(self,fname):
+        "Load parameter dict from numpy/pickle file, and merge into instance params"
+        read_dict = np.load(fname,allow_pickle='TRUE').item()
+        self.params = _update_args( self.params, **read_dict)
+
+    def backproject(self, sino, angles, **kwargs):
+        print("in backproject()")
+        self.params = _update_args( self.params, **kwargs)
+        return backproject(sino, angles, **self.params)
+
+    # TBD
+    def return_mask(self):
+        print("in return_mask()..TBD")
+
+
+
 def _svmbir_lib_path():
     """Returns the path to the cache directory used by svmbir
     """
     return __svmbir_lib_path
-
 
 def _clear_cache(svmbir_lib_path = __svmbir_lib_path):
     """Clears the cache files used by svmbir
@@ -225,44 +305,53 @@ def auto_roi_radius(delta_pixel, num_rows, num_cols):
     return roi_radius
 
 
-def max_threads(num_threads, num_slices, num_rows, num_cols, positivity = True):
-    """Computes the maximum recommended number of threads for stable convergence.
-
-    Args:
-        num_threads (int): Desired number of compute threads requested when executed.
-        num_slices (int): Number of slices in reconstruction.
-        num_rows (int): Integer number of rows in reconstructed image.
-        num_cols (int): Integer number of columns in reconstructed image.
-        positivity (bool, optional): [Default=True] Boolean value that determines if positivity constraint is enforced.
-
-    Returns:
-        int: Maximum recommended number of threads.
+def _update_args(default_params, **kwargs):
     """
-    # Set the minimum average super-voxel distance used in simultaneous updates
-    avg_SV_dist = 7.0
-    super_voxel_width = 16
-
-    # compute number of possible super-voxels
-    number_of_possible_SVs = ( num_slices * num_rows*num_cols) / super_voxel_width**2
-
-    # Set the maximum number of allowed threads
-    max_threads = int( np.ceil( number_of_possible_SVs / ( (avg_SV_dist)**2 ) ) )
-    if ( (num_threads > max_threads) and (positivity is False) ):
-        num_threads = max_threads
-        print("Warning: Reducing the number of threads to ",num_threads)
-    return num_threads
+    Update parameter dictionary with kwargs input.
+    Raises an exception if kwargs key is not defined in dictionary.
+    """
+    params = dict(default_params)
+    for key,val in kwargs.items():
+        if key in default_params.keys():
+            params[key] = val
+        else:
+            raise NameError('"{}" not a recognized argument'.format(key))
+    return params
 
 
-def recon(sino, angles,
-          weights = None, weight_type = 'unweighted', init_image = 0.0, prox_image = None, init_proj = None,
-          num_rows = None, num_cols = None, roi_radius = None,
-          delta_channel = 1.0, delta_pixel = 1.0, center_offset = 0.0,
-          sigma_y = None, snr_db = 30.0, sigma_x = None, sigma_p = None, p = 1.2, q = 2.0, T = 1.0, b_interslice = 1.0,
-          sharpness = 0.0, positivity = True, max_resolutions = 0, stop_threshold = 0.02, max_iterations = 100,
-          num_threads = None, delete_temps = True, svmbir_lib_path = __svmbir_lib_path, object_name = 'object',
-          verbose = 1) :
-    """recon(sino, angles, weights = None, weight_type = 'unweighted', init_image = 0.0, prox_image = None, init_proj = None, num_rows = None, num_cols = None, roi_radius = None, delta_channel = 1.0, delta_pixel = 1.0, center_offset = 0.0, sigma_y = None, snr_db = 30.0, sigma_x = None, p = 1.2, q = 2.0, T = 1.0, b_interslice = 1.0, sharpness = 1.0, positivity = True, max_resolutions = 0, stop_threshold = 0.02, max_iterations = 100, num_threads = None, delete_temps = True, svmbir_lib_path = '~/.cache/svmbir', object_name = 'object', verbose = 1)
+_recon_defaults_dict = {
+        'weights' : None,
+        'weight_type' : 'unweighted',
+        'init_image' : 0.0,
+        'prox_image' : None,
+        'init_proj' : None,
+        'num_rows' : None,
+        'num_cols' : None,
+        'roi_radius' : None,
+        'delta_channel' : 1.0,
+        'delta_pixel' : 1.0,
+        'center_offset' : 0.0,
+        'sigma_y' : None,
+        'snr_db' : 30.0,
+        'sigma_x' : None,
+        'sigma_p' : None,
+        'p' : 1.2,
+        'q' : 2.0,
+        'T' : 1.0,
+        'b_interslice' : 1.0,
+        'sharpness' : 0.0,
+        'positivity' : True,
+        'max_resolutions' : 0,
+        'stop_threshold' : 0.02,
+        'max_iterations' : 100,
+        'num_threads' : None,
+        'delete_temps' : True,
+        'svmbir_lib_path' : __svmbir_lib_path,
+        'object_name' : 'object',
+        'verbose' : 1}
 
+def recon(sino, angles, **kwargs):
+    """
     Computes 3D parallel beam MBIR reconstruction using multi-resolution SVMBIR algorithm.
 
     Args:
@@ -358,9 +447,44 @@ def recon(sino, angles,
         3D numpy array: 3D reconstruction with shape (num_slices,num_rows,num_cols) in units of :math:`ALU^{-1}`.
     """
 
+    default_params = _recon_defaults_dict
+    params = _update_args(default_params, **kwargs)
+
+    weights = params['weights']
+    weight_type = params['weight_type']
+    init_image = params['init_image']
+    prox_image = params['prox_image']
+    init_proj = params['init_proj']
+    num_rows = params['num_rows']
+    num_cols = params['num_cols']
+    roi_radius = params['roi_radius']
+    delta_channel = params['delta_channel']
+    delta_pixel = params['delta_pixel']
+    center_offset = params['center_offset']
+    sigma_y = params['sigma_y']
+    snr_db = params['snr_db']
+    sigma_x = params['sigma_x']
+    sigma_p = params['sigma_p']
+    p = params['p']
+    q = params['q']
+    T = params['T']
+    b_interslice = params['b_interslice']
+    sharpness = params['sharpness']
+    positivity = params['positivity']
+    max_resolutions = params['max_resolutions']
+    stop_threshold = params['stop_threshold']
+    max_iterations = params['max_iterations']
+    num_threads = params['num_threads']
+    delete_temps = params['delete_temps']
+    svmbir_lib_path = params['svmbir_lib_path']
+    object_name = params['object_name']
+    verbose = params['verbose']
+
     # If not specified, then set number of threads = to number of processors
     if num_threads is None :
         num_threads = cpu_count(logical=False)
+    os.environ['OMP_NUM_THREADS'] = str(num_threads)
+    os.environ['OMP_DYNAMIC'] = 'true'
 
     # Test for valid sino and angles structure. If sino is 2D, make it 3D
     angles = utils.test_args_angles(angles)
@@ -401,13 +525,6 @@ def recon(sino, angles,
         if sigma_p is None:
             sigma_p = auto_sigma_p(sino, delta_channel, sharpness)
         sigma_x = sigma_p
-
-    # Reduce num_threads for positivity=False if problems size calls for it
-    #num_threads_max = max_threads(num_threads, num_slices, num_rows, num_cols, positivity=positivity)
-    #if num_threads_max < num_threads:
-    #    num_threads = num_threads_max
-    os.environ['OMP_NUM_THREADS'] = str(num_threads)
-    os.environ['OMP_DYNAMIC'] = 'true'
 
     reconstruction = ci.multires_recon(sino=sino, angles=angles, weights=weights, weight_type=weight_type,
                                        init_image=init_image, prox_image=prox_image, init_proj=init_proj,
@@ -515,11 +632,8 @@ def project(image, angles, num_channels,
 
 
 
-def backproject(sino, angles, num_rows=None, num_cols=None,
-            delta_channel = 1.0, delta_pixel = 1.0, center_offset = 0.0, roi_radius = None,
-            num_threads = None, svmbir_lib_path = __svmbir_lib_path, delete_temps = True, 
-            object_name = 'object', verbose = 1):
-    """backproject(sino, angles, num_rows = None, num_cols = None, delta_channel = 1.0, delta_pixel = 1.0, center_offset = 0.0, roi_radius = None, num_threads = None, svmbir_lib_path = '~/.cache/svmbir', delete_temps = True, object_name = 'object', verbose = 1)
+def backproject(sino, angles, **kwargs):
+    """backproject(sino, angles, **kwargs)
 
     Computes 3D parallel beam back-projection.
 
@@ -555,6 +669,20 @@ def backproject(sino, angles, num_rows=None, num_cols=None,
     Returns:
         ndarray: 3D numpy array containing back projected image (num_slices,num_rows,num_cols).
     """
+    default_params = _recon_defaults_dict
+    params = _update_args(default_params, **kwargs)
+
+    num_rows = params['num_rows']
+    num_cols = params['num_cols']
+    delta_channel = params['delta_channel']
+    delta_pixel = params['delta_pixel']
+    center_offset = params['center_offset']
+    roi_radius = params['roi_radius']
+    num_threads = params['num_threads']
+    svmbir_lib_path = params['svmbir_lib_path']
+    delete_temps = params['delete_temps']
+    object_name = params['object_name']
+    verbose = params['verbose']
 
     # validate input arguments
     angles = utils.test_args_angles(angles)
